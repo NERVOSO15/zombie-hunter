@@ -4,12 +4,17 @@ import json
 import os
 from typing import Any
 
+import structlog
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
-import structlog
 
 from zombie_hunter.config import Settings, get_global_settings
-from zombie_hunter.resources.types import CloudProvider, ResourceType, ZombieResource, ZombieReason
+from zombie_hunter.resources.types import (
+    CloudProvider,
+    ResourceType,
+    ZombieReason,
+    ZombieResource,
+)
 from zombie_hunter.scanners.base import ScannerRegistry
 from zombie_hunter.slack.notifier import SlackNotifier
 
@@ -314,9 +319,7 @@ class SlackInteractiveHandler:
         except Exception as e:
             self._log.error("modal_open_error", error=str(e))
 
-    def _send_error_response(
-        self, client: Any, channel: str, ts: str, error: str
-    ) -> None:
+    def _send_error_response(self, client: Any, channel: str, ts: str, error: str) -> None:
         """Send an error response in the channel."""
         blocks = [
             {

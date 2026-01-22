@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from zombie_hunter import __version__
-from zombie_hunter.config import Settings, init_settings, SlackMode
+from zombie_hunter.config import Settings, SlackMode, init_settings
 from zombie_hunter.resources.types import AggregatedScanResult, CloudProvider
 from zombie_hunter.scanners.base import ScannerRegistry
 from zombie_hunter.slack.notifier import SlackNotifier
@@ -64,7 +64,7 @@ def cli(ctx: click.Context, config: Path | None, dry_run: bool | None, demo: boo
 
     A FinOps tool that scans cloud providers for unused resources,
     estimates cost savings, and enables cleanup via Slack.
-    
+
     Use --demo flag to test without cloud accounts.
     """
     ctx.ensure_object(dict)
@@ -79,6 +79,7 @@ def cli(ctx: click.Context, config: Path | None, dry_run: bool | None, demo: boo
     # Register mock scanner for demo mode
     if demo:
         from zombie_hunter.scanners.mock import register_mock_scanner
+
         register_mock_scanner()
         console.print("[cyan]🎭 Demo mode enabled - using mock data[/cyan]\n")
 
@@ -302,10 +303,13 @@ def delete(
         sys.exit(1)
 
     # Confirmation
-    if not force and not settings.dry_run:
-        if not click.confirm(f"Are you sure you want to delete {resource_id}?"):
-            console.print("[yellow]Aborted.[/yellow]")
-            return
+    if (
+        not force
+        and not settings.dry_run
+        and not click.confirm(f"Are you sure you want to delete {resource_id}?")
+    ):
+        console.print("[yellow]Aborted.[/yellow]")
+        return
 
     # Create resource
     zombie = ZombieResource(

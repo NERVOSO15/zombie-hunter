@@ -1,15 +1,15 @@
 """Azure scanner for detecting zombie resources."""
 
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
 try:
+    from azure.core.exceptions import AzureError, ResourceNotFoundError
     from azure.identity import DefaultAzureCredential
     from azure.mgmt.compute import ComputeManagementClient
     from azure.mgmt.network import NetworkManagementClient
-    from azure.core.exceptions import AzureError, ResourceNotFoundError
+
     AZURE_AVAILABLE = True
 except ImportError:
     AZURE_AVAILABLE = False
@@ -35,7 +35,8 @@ class AzureScanner(BaseScanner):
         """Initialize Azure scanner."""
         if not AZURE_AVAILABLE:
             raise ImportError(
-                "Azure SDK not installed. Install with: pip install azure-identity azure-mgmt-compute azure-mgmt-network"
+                "Azure SDK not installed. Install with: "
+                "pip install azure-identity azure-mgmt-compute azure-mgmt-network"
             )
 
         super().__init__(settings)
@@ -49,12 +50,8 @@ class AzureScanner(BaseScanner):
 
         # Initialize credentials and clients
         self._credential = DefaultAzureCredential()
-        self._compute_client = ComputeManagementClient(
-            self._credential, self.subscription_id
-        )
-        self._network_client = NetworkManagementClient(
-            self._credential, self.subscription_id
-        )
+        self._compute_client = ComputeManagementClient(self._credential, self.subscription_id)
+        self._network_client = NetworkManagementClient(self._credential, self.subscription_id)
 
     @property
     def provider(self) -> CloudProvider:
@@ -96,7 +93,9 @@ class AzureScanner(BaseScanner):
                         reason=ZombieReason.UNATTACHED,
                         reason_detail="Disk is not attached to any virtual machine",
                         size_gb=disk.disk_size_gb,
-                        created_at=disk.time_created.replace(tzinfo=None) if disk.time_created else None,
+                        created_at=(
+                            disk.time_created.replace(tzinfo=None) if disk.time_created else None
+                        ),
                         metadata={
                             "disk_type": disk_type,
                             "disk_state": disk.disk_state,
@@ -212,9 +211,17 @@ class AzureScanner(BaseScanner):
                         metadata={
                             "sku": lb.sku.name if lb.sku else None,
                             "resource_group": resource_group,
-                            "frontend_count": len(lb.frontend_ip_configurations) if lb.frontend_ip_configurations else 0,
-                            "backend_pool_count": len(lb.backend_address_pools) if lb.backend_address_pools else 0,
-                            "rule_count": len(lb.load_balancing_rules) if lb.load_balancing_rules else 0,
+                            "frontend_count": (
+                                len(lb.frontend_ip_configurations)
+                                if lb.frontend_ip_configurations
+                                else 0
+                            ),
+                            "backend_pool_count": (
+                                len(lb.backend_address_pools) if lb.backend_address_pools else 0
+                            ),
+                            "rule_count": (
+                                len(lb.load_balancing_rules) if lb.load_balancing_rules else 0
+                            ),
                             "provisioning_state": lb.provisioning_state,
                             "resource_id": lb.id,
                         },
@@ -239,7 +246,7 @@ class AzureScanner(BaseScanner):
         """Scan for old disk snapshots."""
         zombies: list[ZombieResource] = []
 
-        threshold_date = datetime.now(timezone.utc) - timedelta(
+        threshold_date = datetime.now(UTC) - timedelta(
             days=self.settings.thresholds.snapshot_age_days
         )
 
@@ -260,21 +267,32 @@ class AzureScanner(BaseScanner):
                         resource_type=ResourceType.AZURE_SNAPSHOT,
                         region=snapshot.location,
                         reason=ZombieReason.AGE_EXCEEDED,
-                        reason_detail=f"Snapshot is older than {self.settings.thresholds.snapshot_age_days} days",
+                        reason_detail=(
+                            f"Snapshot is older than "
+                            f"{self.settings.thresholds.snapshot_age_days} days"
+                        ),
                         size_gb=snapshot.disk_size_gb,
                         created_at=snapshot.time_created.replace(tzinfo=None),
                         metadata={
-                            "source_resource_id": snapshot.creation_data.source_resource_id if snapshot.creation_data else None,
+                            "source_resource_id": (
+                                snapshot.creation_data.source_resource_id
+                                if snapshot.creation_data
+                                else None
+                            ),
                             "resource_group": resource_group,
                             "provisioning_state": snapshot.provisioning_state,
-                            "incremental": snapshot.incremental if hasattr(snapshot, "incremental") else None,
+                            "incremental": (
+                                snapshot.incremental if hasattr(snapshot, "incremental") else None
+                            ),
                             "resource_id": snapshot.id,
                         },
                     )
 
                     # Check if source disk still exists
                     if snapshot.creation_data and snapshot.creation_data.source_resource_id:
-                        disk_exists = self._check_disk_exists(snapshot.creation_data.source_resource_id)
+                        disk_exists = self._check_disk_exists(
+                            snapshot.creation_data.source_resource_id
+                        )
                         if not disk_exists:
                             zombie.deletion_warning = (
                                 "Source disk no longer exists - this may be the only backup"
@@ -286,7 +304,7 @@ class AzureScanner(BaseScanner):
                     self._log.debug(
                         "found_zombie_snapshot",
                         snapshot_name=snapshot.name,
-                        age_days=(datetime.now(timezone.utc) - snapshot.time_created).days,
+                        age_days=(datetime.now(UTC) - snapshot.time_created).days,
                     )
 
         except AzureError as e:
@@ -356,9 +374,7 @@ class AzureScanner(BaseScanner):
 
     def _delete_public_ip(self, resource_group: str, ip_name: str) -> bool:
         """Delete a public IP address."""
-        poller = self._network_client.public_ip_addresses.begin_delete(
-            resource_group, ip_name
-        )
+        poller = self._network_client.public_ip_addresses.begin_delete(resource_group, ip_name)
         poller.wait()
         return True
 

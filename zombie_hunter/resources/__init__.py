@@ -3,8 +3,8 @@
 from zombie_hunter.resources.types import (
     CloudProvider,
     ResourceType,
-    ZombieResource,
     ScanResult,
+    ZombieResource,
 )
 
 __all__ = ["CloudProvider", "ResourceType", "ZombieResource", "ScanResult"]

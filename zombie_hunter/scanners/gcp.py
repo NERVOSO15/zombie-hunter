@@ -1,14 +1,14 @@
 """GCP scanner for detecting zombie resources."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
 
 try:
-    from google.cloud import compute_v1
-    from google.cloud import monitoring_v3
     from google.api_core.exceptions import GoogleAPICallError, NotFound
+    from google.cloud import compute_v1
+
     GCP_AVAILABLE = True
 except ImportError:
     GCP_AVAILABLE = False
@@ -34,7 +34,8 @@ class GCPScanner(BaseScanner):
         """Initialize GCP scanner."""
         if not GCP_AVAILABLE:
             raise ImportError(
-                "GCP SDK not installed. Install with: pip install google-cloud-compute google-cloud-monitoring"
+                "GCP SDK not installed. Install with: "
+                "pip install google-cloud-compute google-cloud-monitoring"
             )
 
         super().__init__(settings)
@@ -243,7 +244,7 @@ class GCPScanner(BaseScanner):
         if region != self.regions[0]:
             return zombies
 
-        threshold_date = datetime.now(timezone.utc) - timedelta(
+        threshold_date = datetime.now(UTC) - timedelta(
             days=self.settings.thresholds.snapshot_age_days
         )
 
@@ -269,7 +270,10 @@ class GCPScanner(BaseScanner):
                         resource_type=ResourceType.GCP_SNAPSHOT,
                         region="global",
                         reason=ZombieReason.AGE_EXCEEDED,
-                        reason_detail=f"Snapshot is older than {self.settings.thresholds.snapshot_age_days} days",
+                        reason_detail=(
+                            f"Snapshot is older than "
+                            f"{self.settings.thresholds.snapshot_age_days} days"
+                        ),
                         size_gb=snapshot.disk_size_gb,
                         created_at=created_at.replace(tzinfo=None),
                         metadata={
@@ -293,7 +297,7 @@ class GCPScanner(BaseScanner):
                     self._log.debug(
                         "found_zombie_snapshot",
                         snapshot_name=snapshot.name,
-                        age_days=(datetime.now(timezone.utc) - created_at).days,
+                        age_days=(datetime.now(UTC) - created_at).days,
                     )
 
         except GoogleAPICallError as e:
@@ -416,7 +420,9 @@ class GCPScanner(BaseScanner):
             self._log.error("operation_wait_error", error=str(e))
             return False
 
-    def _wait_for_regional_operation(self, operation: Any, region: str, timeout: int = 300) -> bool:
+    def _wait_for_regional_operation(
+        self, operation: Any, region: str, timeout: int = 300
+    ) -> bool:
         """Wait for a regional operation to complete."""
         try:
             operations_client = compute_v1.RegionOperationsClient()

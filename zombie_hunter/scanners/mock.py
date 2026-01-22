@@ -55,7 +55,7 @@ MOCK_REGIONS = ["us-east-1", "us-west-2", "eu-west-1"]
 class MockScanner(BaseScanner):
     """
     Mock scanner that generates fake zombie resources for testing.
-    
+
     This scanner doesn't connect to any cloud provider - it generates
     realistic-looking zombie resources for testing the full workflow.
     """
@@ -84,7 +84,7 @@ class MockScanner(BaseScanner):
         zombies: list[ZombieResource] = []
         num_volumes = random.randint(1, 4)
 
-        for i in range(num_volumes):
+        for _ in range(num_volumes):
             name = random.choice(MOCK_VOLUME_NAMES)
             size = random.choice([20, 50, 100, 200, 500, 1000])
             volume_type = random.choice(["gp2", "gp3", "io1", "st1"])
@@ -122,7 +122,7 @@ class MockScanner(BaseScanner):
 
         for _ in range(num_ips):
             days_old = random.randint(7, 180)
-            
+
             zombie = ZombieResource(
                 id=f"eipalloc-{random.randint(10000000, 99999999):08x}",
                 name="",
@@ -133,7 +133,10 @@ class MockScanner(BaseScanner):
                 reason_detail="Elastic IP is not associated with any resource",
                 created_at=datetime.utcnow() - timedelta(days=days_old),
                 metadata={
-                    "public_ip": f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}",
+                    "public_ip": (
+                        f"{random.randint(1,255)}.{random.randint(1,255)}."
+                        f"{random.randint(1,255)}.{random.randint(1,255)}"
+                    ),
                     "domain": "vpc",
                 },
             )
@@ -163,7 +166,10 @@ class MockScanner(BaseScanner):
             )
 
             zombie = ZombieResource(
-                id=f"arn:aws:elasticloadbalancing:{region}:123456789:loadbalancer/{lb_type}/{name}/{random.randint(1000000, 9999999)}",
+                id=(
+                    f"arn:aws:elasticloadbalancing:{region}:123456789:"
+                    f"loadbalancer/{lb_type}/{name}/{random.randint(1000000, 9999999)}"
+                ),
                 name=name,
                 provider=CloudProvider.AWS,
                 resource_type=resource_type,
@@ -206,7 +212,9 @@ class MockScanner(BaseScanner):
                 resource_type=ResourceType.RDS_SNAPSHOT,
                 region=region,
                 reason=ZombieReason.AGE_EXCEEDED,
-                reason_detail=f"Snapshot is older than {self.settings.thresholds.snapshot_age_days} days",
+                reason_detail=(
+                    f"Snapshot is older than {self.settings.thresholds.snapshot_age_days} days"
+                ),
                 size_gb=size,
                 created_at=datetime.utcnow() - timedelta(days=days_old),
                 metadata={

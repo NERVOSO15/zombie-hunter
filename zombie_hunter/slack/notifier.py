@@ -3,9 +3,9 @@
 import json
 from typing import Any
 
+import structlog
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-import structlog
 
 from zombie_hunter.config import Settings, SlackMode
 from zombie_hunter.cost.estimator import CostEstimator
@@ -79,7 +79,10 @@ class SlackNotifier:
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": ":white_check_mark: *Zombie Hunter Scan Complete*\n\nNo zombie resources found! Your cloud is clean.",
+                        "text": (
+                            ":white_check_mark: *Zombie Hunter Scan Complete*\n\n"
+                            "No zombie resources found! Your cloud is clean."
+                        ),
                     },
                 },
             ]
@@ -136,7 +139,10 @@ class SlackNotifier:
                     },
                     {
                         "type": "mrkdwn",
-                        "text": f"*Providers Scanned:*\n{', '.join(p.value.upper() for p in results.providers_scanned)}",
+                        "text": (
+                            f"*Providers Scanned:*\n"
+                            f"{', '.join(p.value.upper() for p in results.providers_scanned)}"
+                        ),
                     },
                 ],
             },
@@ -172,7 +178,10 @@ class SlackNotifier:
         self.client.chat_postMessage(
             channel=self.slack_settings.channel,
             blocks=blocks,
-            text=f"Zombie Hunter found {results.total_zombie_count} zombies (${results.total_monthly_savings:.2f}/mo potential savings)",
+            text=(
+                f"Zombie Hunter found {results.total_zombie_count} zombies "
+                f"(${results.total_monthly_savings:.2f}/mo potential savings)"
+            ),
         )
 
     def _send_zombie_notification(self, zombie: ZombieResource) -> None:
@@ -285,7 +294,10 @@ class SlackNotifier:
                                 "title": {"type": "plain_text", "text": "Confirm Deletion"},
                                 "text": {
                                     "type": "mrkdwn",
-                                    "text": f"Are you sure you want to delete `{zombie.id}`?\n\nThis action cannot be undone.",
+                                    "text": (
+                                        f"Are you sure you want to delete `{zombie.id}`?\n\n"
+                                        "This action cannot be undone."
+                                    ),
                                 },
                                 "confirm": {"type": "plain_text", "text": "Delete"},
                                 "deny": {"type": "plain_text", "text": "Cancel"},
@@ -316,7 +328,10 @@ class SlackNotifier:
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"_...and {remaining} more zombie resources. Check the summary above for full breakdown._",
+                    "text": (
+                        f"_...and {remaining} more zombie resources. "
+                        "Check the summary above for full breakdown._"
+                    ),
                 },
             },
         ]

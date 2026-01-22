@@ -2,7 +2,6 @@
 
 from zombie_hunter.resources.types import CloudProvider, ResourceType, ZombieResource
 
-
 # AWS Pricing (approximate, us-east-1 region)
 # These are estimates and should be updated based on actual AWS pricing
 AWS_PRICING = {
@@ -254,6 +253,8 @@ class CostEstimator:
                 breakdown[rt] = {"count": 0, "monthly_cost": 0.0}
 
             breakdown[rt]["count"] = int(breakdown[rt]["count"]) + 1
-            breakdown[rt]["monthly_cost"] = float(breakdown[rt]["monthly_cost"]) + resource.monthly_cost
+            breakdown[rt]["monthly_cost"] = (
+                float(breakdown[rt]["monthly_cost"]) + resource.monthly_cost
+            )
 
         return breakdown

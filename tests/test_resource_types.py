@@ -2,8 +2,6 @@
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from zombie_hunter.resources.types import (
     AggregatedScanResult,
     CloudProvider,
@@ -30,7 +28,7 @@ class TestZombieResource:
             size_gb=100,
             monthly_cost=8.0,
         )
-        
+
         assert zombie.id == "vol-123"
         assert zombie.name == "test-volume"
         assert zombie.provider == CloudProvider.AWS
@@ -47,7 +45,7 @@ class TestZombieResource:
             region="us-east-1",
             reason=ZombieReason.UNATTACHED,
         )
-        
+
         assert zombie.display_name == "my-volume (vol-123)"
 
     def test_display_name_without_name(self) -> None:
@@ -59,7 +57,7 @@ class TestZombieResource:
             region="us-east-1",
             reason=ZombieReason.UNATTACHED,
         )
-        
+
         assert zombie.display_name == "vol-123"
 
     def test_age_days(self) -> None:
@@ -73,7 +71,7 @@ class TestZombieResource:
             reason=ZombieReason.UNATTACHED,
             created_at=created,
         )
-        
+
         assert zombie.age_days == 30
 
     def test_age_days_none(self) -> None:
@@ -85,7 +83,7 @@ class TestZombieResource:
             region="us-east-1",
             reason=ZombieReason.UNATTACHED,
         )
-        
+
         assert zombie.age_days is None
 
     def test_idle_days(self) -> None:
@@ -99,7 +97,7 @@ class TestZombieResource:
             reason=ZombieReason.NO_TRAFFIC,
             last_used_at=last_used,
         )
-        
+
         assert zombie.idle_days == 15
 
     def test_to_slack_summary(self) -> None:
@@ -112,7 +110,7 @@ class TestZombieResource:
             reason=ZombieReason.UNATTACHED,
             monthly_cost=40.0,
         )
-        
+
         summary = zombie.to_slack_summary()
         assert "Ebs Volume" in summary
         assert "vol-123" in summary
@@ -130,7 +128,7 @@ class TestZombieResource:
             tags={"Environment": "dev", "Team": "platform"},
             metadata={"volume_type": "gp3", "encrypted": True},
         )
-        
+
         assert zombie.tags["Environment"] == "dev"
         assert zombie.metadata["volume_type"] == "gp3"
         assert zombie.metadata["encrypted"] is True
@@ -145,7 +143,7 @@ class TestScanResult:
             provider=CloudProvider.AWS,
             regions_scanned=["us-east-1", "us-west-2"],
         )
-        
+
         assert result.provider == CloudProvider.AWS
         assert "us-east-1" in result.regions_scanned
         assert result.zombie_count == 0
@@ -169,12 +167,12 @@ class TestScanResult:
             reason=ZombieReason.UNATTACHED,
             monthly_cost=20.0,
         )
-        
+
         result = ScanResult(
             provider=CloudProvider.AWS,
             zombies=[zombie1, zombie2],
         )
-        
+
         assert result.total_monthly_savings == 30.0
         assert result.zombie_count == 2
 
@@ -194,12 +192,12 @@ class TestScanResult:
             region="us-east-1",
             reason=ZombieReason.UNATTACHED,
         )
-        
+
         result = ScanResult(
             provider=CloudProvider.AWS,
             zombies=[volume, eip],
         )
-        
+
         by_type = result.zombies_by_type
         assert ResourceType.EBS_VOLUME in by_type
         assert ResourceType.ELASTIC_IP in by_type
@@ -209,7 +207,7 @@ class TestScanResult:
         """Test marking scan as completed."""
         result = ScanResult(provider=CloudProvider.AWS)
         assert result.scan_completed_at is None
-        
+
         result.mark_completed()
         assert result.scan_completed_at is not None
 
@@ -235,15 +233,15 @@ class TestAggregatedScanResult:
             reason=ZombieReason.UNATTACHED,
             monthly_cost=15.0,
         )
-        
+
         aws_result = ScanResult(provider=CloudProvider.AWS, zombies=[aws_zombie])
         gcp_result = ScanResult(provider=CloudProvider.GCP, zombies=[gcp_zombie])
-        
+
         aggregated = AggregatedScanResult(
             results=[aws_result, gcp_result],
             scan_id="test-123",
         )
-        
+
         assert aggregated.total_zombie_count == 2
         assert aggregated.total_monthly_savings == 25.0
         assert len(aggregated.all_zombies) == 2
@@ -252,9 +250,9 @@ class TestAggregatedScanResult:
         """Test listing scanned providers."""
         aws_result = ScanResult(provider=CloudProvider.AWS)
         gcp_result = ScanResult(provider=CloudProvider.GCP)
-        
+
         aggregated = AggregatedScanResult(results=[aws_result, gcp_result])
-        
+
         providers = aggregated.providers_scanned
         assert CloudProvider.AWS in providers
         assert CloudProvider.GCP in providers
@@ -269,10 +267,10 @@ class TestAggregatedScanResult:
             reason=ZombieReason.UNATTACHED,
             monthly_cost=50.0,
         )
-        
+
         result = ScanResult(provider=CloudProvider.AWS, zombies=[zombie])
         aggregated = AggregatedScanResult(results=[result], scan_id="test-123")
-        
+
         summary = aggregated.get_summary()
         assert "test-123" in summary
         assert "aws" in summary.lower()

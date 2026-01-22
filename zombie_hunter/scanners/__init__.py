@@ -1,19 +1,15 @@
 """Cloud provider scanners for detecting zombie resources."""
 
+import contextlib
+
+from zombie_hunter.scanners import aws as _aws  # noqa: F401
 from zombie_hunter.scanners.base import BaseScanner, ScannerRegistry
 
-# Import scanners to register them
-from zombie_hunter.scanners import aws
-
 # Conditional imports for optional cloud providers
-try:
-    from zombie_hunter.scanners import gcp
-except ImportError:
-    pass  # GCP SDK not installed
+with contextlib.suppress(ImportError):
+    from zombie_hunter.scanners import gcp as _gcp  # noqa: F401
 
-try:
-    from zombie_hunter.scanners import azure
-except ImportError:
-    pass  # Azure SDK not installed
+with contextlib.suppress(ImportError):
+    from zombie_hunter.scanners import azure as _azure  # noqa: F401
 
 __all__ = ["BaseScanner", "ScannerRegistry"]

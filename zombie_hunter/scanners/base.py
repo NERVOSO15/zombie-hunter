@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from datetime import datetime
+
 import structlog
 
 from zombie_hunter.config import Settings

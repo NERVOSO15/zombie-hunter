@@ -1,11 +1,11 @@
 """AWS scanner for detecting zombie resources."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
-from botocore.exceptions import ClientError
 import structlog
+from botocore.exceptions import ClientError
 
 from zombie_hunter.config import Settings
 from zombie_hunter.cost.estimator import CostEstimator
@@ -198,7 +198,11 @@ class AWSScanner(BaseScanner):
                             provider=CloudProvider.AWS,
                             resource_type=resource_type,
                             region=region,
-                            reason=ZombieReason.NO_TARGETS if not has_targets else ZombieReason.NO_TRAFFIC,
+                            reason=(
+                                ZombieReason.NO_TARGETS
+                                if not has_targets
+                                else ZombieReason.NO_TRAFFIC
+                            ),
                             reason_detail=reason_detail,
                             created_at=lb["CreatedTime"].replace(tzinfo=None),
                             metadata={
@@ -253,11 +257,9 @@ class AWSScanner(BaseScanner):
             # ARN format: arn:aws:elasticloadbalancing:region:account:loadbalancer/type/name/id
             lb_dimension = "/".join(lb_arn.split("/")[-3:])
 
-            metric_name = (
-                "RequestCount" if lb_type == "application" else "ProcessedBytes"
-            )
+            metric_name = "RequestCount" if lb_type == "application" else "ProcessedBytes"
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             start_time = end_time - timedelta(days=self.settings.thresholds.lb_idle_days)
 
             response = cloudwatch.get_metric_statistics(
@@ -271,11 +273,9 @@ class AWSScanner(BaseScanner):
             )
 
             # Check if there's any traffic
-            for datapoint in response.get("Datapoints", []):
-                if datapoint.get("Sum", 0) > 0:
-                    return True
-
-            return False
+            return any(
+                datapoint.get("Sum", 0) > 0 for datapoint in response.get("Datapoints", [])
+            )
 
         except ClientError:
             # If we can't check, assume it has traffic (safer)
@@ -286,7 +286,7 @@ class AWSScanner(BaseScanner):
         zombies: list[ZombieResource] = []
         rds = self._get_client("rds", region)
 
-        threshold_date = datetime.now(timezone.utc) - timedelta(
+        threshold_date = datetime.now(UTC) - timedelta(
             days=self.settings.thresholds.snapshot_age_days
         )
 
@@ -298,7 +298,7 @@ class AWSScanner(BaseScanner):
                 for snapshot in page["DBSnapshots"]:
                     # Check if snapshot is older than threshold
                     snapshot_time = snapshot["SnapshotCreateTime"]
-                    if snapshot_time.replace(tzinfo=timezone.utc) < threshold_date:
+                    if snapshot_time.replace(tzinfo=UTC) < threshold_date:
                         zombie = ZombieResource(
                             id=snapshot["DBSnapshotIdentifier"],
                             name=snapshot["DBSnapshotIdentifier"],
@@ -306,7 +306,10 @@ class AWSScanner(BaseScanner):
                             resource_type=ResourceType.RDS_SNAPSHOT,
                             region=region,
                             reason=ZombieReason.AGE_EXCEEDED,
-                            reason_detail=f"Snapshot is older than {self.settings.thresholds.snapshot_age_days} days",
+                            reason_detail=(
+                                f"Snapshot is older than "
+                                f"{self.settings.thresholds.snapshot_age_days} days"
+                            ),
                             size_gb=snapshot.get("AllocatedStorage", 0),
                             created_at=snapshot_time.replace(tzinfo=None),
                             metadata={
@@ -334,7 +337,7 @@ class AWSScanner(BaseScanner):
                         self._log.debug(
                             "found_zombie_snapshot",
                             snapshot_id=snapshot["DBSnapshotIdentifier"],
-                            age_days=(datetime.now(timezone.utc) - snapshot_time).days,
+                            age_days=(datetime.now(UTC) - snapshot_time).days,
                         )
 
         except ClientError as e:
@@ -352,9 +355,7 @@ class AWSScanner(BaseScanner):
             rds.describe_db_instances(DBInstanceIdentifier=db_identifier)
             return True
         except ClientError as e:
-            if e.response["Error"]["Code"] == "DBInstanceNotFound":
-                return False
-            return True  # Assume exists if we can't check
+            return e.response["Error"]["Code"] != "DBInstanceNotFound"
 
     def delete_resource(self, resource: ZombieResource) -> bool:
         """Delete a zombie resource."""
