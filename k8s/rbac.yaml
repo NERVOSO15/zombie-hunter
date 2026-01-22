@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zombie-hunter
+  namespace: zombie-hunter
+  labels:
+    app.kubernetes.io/name: zombie-hunter
+    app.kubernetes.io/component: rbac
+  annotations:
+    # For AWS IRSA - uncomment and configure
+    # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/zombie-hunter-role
+    
+    # For GCP Workload Identity - uncomment and configure
+    # iam.gke.io/gcp-service-account: zombie-hunter@PROJECT_ID.iam.gserviceaccount.com
+
+---
+# ClusterRole for viewing resources across the cluster (optional, for future K8s resource scanning)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: zombie-hunter-reader
+  labels:
+    app.kubernetes.io/name: zombie-hunter
+    app.kubernetes.io/component: rbac
+rules:
+  # Read-only access to common resources
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - persistentvolumeclaims
+      - configmaps
+    verbs: ["get", "list", "watch"]
+  
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zombie-hunter-reader-binding
+  labels:
+    app.kubernetes.io/name: zombie-hunter
+    app.kubernetes.io/component: rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: zombie-hunter-reader
+subjects:
+  - kind: ServiceAccount
+    name: zombie-hunter
+    namespace: zombie-hunter

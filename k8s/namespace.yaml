@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zombie-hunter
+  labels:
+    app.kubernetes.io/name: zombie-hunter
+    app.kubernetes.io/component: finops

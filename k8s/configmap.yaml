@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zombie-hunter-config
+  namespace: zombie-hunter
+  labels:
+    app.kubernetes.io/name: zombie-hunter
+    app.kubernetes.io/component: config
+data:
+  config.yaml: |
+    # Zombie Hunter Configuration
+    scanner:
+      enabled_providers:
+        - aws
+        # - gcp
+        # - azure
+      
+      aws_regions:
+        - us-east-1
+        - us-west-2
+        - eu-west-1
+      
+      gcp_regions:
+        - us-central1
+        - us-east1
+      
+      azure_regions:
+        - eastus
+        - westus2
+    
+    thresholds:
+      snapshot_age_days: 90
+      lb_idle_days: 30
+      min_cost_threshold: 1.0
+    
+    slack:
+      mode: interactive
+      channel: "#finops-alerts"
+      post_individual_resources: true
+      max_individual_posts: 20
+    
+    dry_run: false
+    
+    logging:
+      level: INFO
+      format: json

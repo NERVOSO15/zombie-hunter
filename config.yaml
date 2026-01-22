@@ -1,0 +1,58 @@
+# Zombie Hunter Configuration
+# Copy this file to config.local.yaml and customize for your environment
+
+scanner:
+  # Enabled cloud providers
+  enabled_providers:
+    - aws
+    # - gcp
+    # - azure
+  
+  # AWS regions to scan
+  aws_regions:
+    - us-east-1
+    - us-west-2
+    - eu-west-1
+  
+  # GCP regions to scan
+  gcp_regions:
+    - us-central1
+    - us-east1
+    - europe-west1
+  
+  # Azure regions to scan
+  azure_regions:
+    - eastus
+    - westus2
+    - westeurope
+
+thresholds:
+  # RDS snapshots older than this (days) are considered zombies
+  snapshot_age_days: 90
+  
+  # Load balancers with no traffic for this many days are zombies
+  lb_idle_days: 30
+  
+  # Minimum cost threshold to report (USD/month)
+  min_cost_threshold: 1.0
+
+slack:
+  # Slack notification mode: "interactive" or "report-only"
+  mode: interactive
+  
+  # Channel to post notifications
+  channel: "#finops-alerts"
+  
+  # Post individual resources or summary only
+  post_individual_resources: true
+  
+  # Maximum resources to post individually (rest go in summary)
+  max_individual_posts: 20
+
+# Dry run mode - if true, no actual deletions will occur
+dry_run: true
+
+# Logging configuration
+logging:
+  level: INFO
+  format: json  # "json" or "console"
