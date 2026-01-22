@@ -420,9 +420,7 @@ class GCPScanner(BaseScanner):
             self._log.error("operation_wait_error", error=str(e))
             return False
 
-    def _wait_for_regional_operation(
-        self, operation: Any, region: str, timeout: int = 300
-    ) -> bool:
+    def _wait_for_regional_operation(self, operation: Any, region: str, timeout: int = 300) -> bool:
         """Wait for a regional operation to complete."""
         try:
             operations_client = compute_v1.RegionOperationsClient()

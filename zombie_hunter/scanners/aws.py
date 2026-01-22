@@ -65,9 +65,7 @@ class AWSScanner(BaseScanner):
         try:
             # Find volumes with state 'available' (not attached)
             paginator = ec2.get_paginator("describe_volumes")
-            for page in paginator.paginate(
-                Filters=[{"Name": "status", "Values": ["available"]}]
-            ):
+            for page in paginator.paginate(Filters=[{"Name": "status", "Values": ["available"]}]):
                 for volume in page["Volumes"]:
                     tags = self._get_resource_tags(volume.get("Tags"))
 
@@ -238,9 +236,7 @@ class AWSScanner(BaseScanner):
 
             for tg in tg_response["TargetGroups"]:
                 # Check each target group for registered targets
-                health_response = elbv2.describe_target_health(
-                    TargetGroupArn=tg["TargetGroupArn"]
-                )
+                health_response = elbv2.describe_target_health(TargetGroupArn=tg["TargetGroupArn"])
                 if health_response["TargetHealthDescriptions"]:
                     return True
 
@@ -273,9 +269,7 @@ class AWSScanner(BaseScanner):
             )
 
             # Check if there's any traffic
-            return any(
-                datapoint.get("Sum", 0) > 0 for datapoint in response.get("Datapoints", [])
-            )
+            return any(datapoint.get("Sum", 0) > 0 for datapoint in response.get("Datapoints", []))
 
         except ClientError:
             # If we can't check, assume it has traffic (safer)
@@ -322,13 +316,10 @@ class AWSScanner(BaseScanner):
                         )
 
                         # Check if source DB still exists
-                        db_exists = self._check_db_exists(
-                            rds, snapshot.get("DBInstanceIdentifier")
-                        )
+                        db_exists = self._check_db_exists(rds, snapshot.get("DBInstanceIdentifier"))
                         if not db_exists:
                             zombie.deletion_warning = (
-                                "Source database no longer exists - "
-                                "this may be the only backup"
+                                "Source database no longer exists - this may be the only backup"
                             )
 
                         self.cost_estimator.update_resource_cost(zombie)

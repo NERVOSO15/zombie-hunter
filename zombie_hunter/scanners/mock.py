@@ -134,8 +134,8 @@ class MockScanner(BaseScanner):
                 created_at=datetime.utcnow() - timedelta(days=days_old),
                 metadata={
                     "public_ip": (
-                        f"{random.randint(1,255)}.{random.randint(1,255)}."
-                        f"{random.randint(1,255)}.{random.randint(1,255)}"
+                        f"{random.randint(1, 255)}.{random.randint(1, 255)}."
+                        f"{random.randint(1, 255)}.{random.randint(1, 255)}"
                     ),
                     "domain": "vpc",
                 },
