@@ -301,11 +301,11 @@ def scan(
     # Output results
     _output_results(aggregated_result, output)
 
-    # Send Slack notification
+    # Send Slack notification (async)
     if notify and settings.slack.bot_token:
         console.print("\n[bold]Sending Slack notification...[/bold]")
         notifier = SlackNotifier(settings)
-        if notifier.send_scan_results(aggregated_result):
+        if asyncio.run(notifier.send_scan_results(aggregated_result)):
             console.print("[green]✓ Slack notification sent[/green]")
         else:
             console.print("[red]✗ Failed to send Slack notification[/red]")

@@ -1,11 +1,10 @@
-"""Slack notification module for zombie resource alerts."""
+"""Slack notification module for zombie resource alerts using async aiohttp."""
 
 import json
 from typing import Any
 
+import aiohttp
 import structlog
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
 
 from zombie_hunter.config import Settings, SlackMode
 from zombie_hunter.cost.estimator import CostEstimator
@@ -17,9 +16,22 @@ from zombie_hunter.resources.types import (
 
 logger = structlog.get_logger()
 
+# Slack Block Kit limits
+MAX_BLOCKS_PER_MESSAGE = 50
+SAFE_BLOCKS_PER_MESSAGE = 40  # Leave buffer for safety
+
+SLACK_API_URL = "https://slack.com/api"
+
 
 class SlackNotifier:
-    """Sends zombie resource notifications to Slack."""
+    """
+    Sends zombie resource notifications to Slack using async aiohttp.
+
+    Features:
+    - Non-blocking async HTTP calls via aiohttp
+    - Automatic pagination for large block payloads (>40 blocks)
+    - Resilient error handling
+    """
 
     def __init__(self, settings: Settings) -> None:
         """
@@ -30,13 +42,209 @@ class SlackNotifier:
         """
         self.settings = settings
         self.slack_settings = settings.slack
-        self.client = WebClient(token=self.slack_settings.bot_token)
+        self.bot_token = self.slack_settings.bot_token
         self.cost_estimator = CostEstimator()
         self._log = logger.bind(component="slack_notifier")
 
-    def send_scan_results(self, results: AggregatedScanResult) -> bool:
+    def _get_headers(self) -> dict[str, str]:
+        """Get authorization headers for Slack API."""
+        return {
+            "Authorization": f"Bearer {self.bot_token}",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+
+    async def _post_message(
+        self,
+        session: aiohttp.ClientSession,
+        blocks: list[dict[str, Any]],
+        text: str,
+        channel: str | None = None,
+    ) -> bool:
         """
-        Send scan results to Slack.
+        Post a message to Slack using aiohttp.
+
+        Args:
+            session: aiohttp client session
+            blocks: Slack Block Kit blocks
+            text: Fallback text
+            channel: Channel to post to (defaults to configured channel)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        payload = {
+            "channel": channel or self.slack_settings.channel,
+            "blocks": blocks,
+            "text": text,
+        }
+
+        try:
+            async with session.post(
+                f"{SLACK_API_URL}/chat.postMessage",
+                headers=self._get_headers(),
+                json=payload,
+            ) as response:
+                data = await response.json()
+
+                if not data.get("ok"):
+                    self._log.error(
+                        "slack_api_error",
+                        error=data.get("error"),
+                        response_metadata=data.get("response_metadata"),
+                    )
+                    return False
+
+                return True
+
+        except aiohttp.ClientError as e:
+            self._log.error("slack_http_error", error=str(e))
+            return False
+
+    async def _update_message(
+        self,
+        session: aiohttp.ClientSession,
+        channel: str,
+        ts: str,
+        blocks: list[dict[str, Any]],
+        text: str,
+    ) -> bool:
+        """
+        Update an existing Slack message.
+
+        Args:
+            session: aiohttp client session
+            channel: Channel ID
+            ts: Message timestamp
+            blocks: New blocks
+            text: Fallback text
+
+        Returns:
+            True if successful
+        """
+        payload = {
+            "channel": channel,
+            "ts": ts,
+            "blocks": blocks,
+            "text": text,
+        }
+
+        try:
+            async with session.post(
+                f"{SLACK_API_URL}/chat.update",
+                headers=self._get_headers(),
+                json=payload,
+            ) as response:
+                data = await response.json()
+                return data.get("ok", False)
+
+        except aiohttp.ClientError as e:
+            self._log.error("slack_update_error", error=str(e))
+            return False
+
+    async def _send_paginated_blocks(
+        self,
+        session: aiohttp.ClientSession,
+        all_blocks: list[dict[str, Any]],
+        header_blocks: list[dict[str, Any]],
+        footer_blocks: list[dict[str, Any]],
+        fallback_text: str,
+    ) -> bool:
+        """
+        Send blocks with automatic pagination if exceeding Slack limits.
+
+        Logic:
+        - First message includes header_blocks + first chunk of content
+        - Middle messages contain content chunks only
+        - Last message includes final content chunk + footer_blocks
+
+        Args:
+            session: aiohttp client session
+            all_blocks: All content blocks to send
+            header_blocks: Blocks for the first message header
+            footer_blocks: Blocks for the last message footer
+            fallback_text: Fallback text for notifications
+
+        Returns:
+            True if all messages sent successfully
+        """
+        if not all_blocks:
+            # Just send header + footer
+            combined = header_blocks + footer_blocks
+            return await self._post_message(session, combined, fallback_text)
+
+        # Calculate available space for content in first/last messages
+        header_size = len(header_blocks)
+        footer_size = len(footer_blocks)
+
+        # Chunk the content blocks
+        chunks: list[list[dict[str, Any]]] = []
+        current_chunk: list[dict[str, Any]] = []
+
+        for block in all_blocks:
+            current_chunk.append(block)
+
+            # First chunk accounts for header, subsequent chunks use full limit
+            limit = SAFE_BLOCKS_PER_MESSAGE - header_size if not chunks else SAFE_BLOCKS_PER_MESSAGE
+
+            if len(current_chunk) >= limit:
+                chunks.append(current_chunk)
+                current_chunk = []
+
+        # Don't forget remaining blocks
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        # If only one chunk and it fits with header + footer
+        total_blocks = header_size + len(all_blocks) + footer_size
+        if total_blocks <= SAFE_BLOCKS_PER_MESSAGE:
+            combined = header_blocks + all_blocks + footer_blocks
+            return await self._post_message(session, combined, fallback_text)
+
+        # Send paginated messages
+        success = True
+        total_chunks = len(chunks)
+
+        for i, chunk in enumerate(chunks):
+            is_first = i == 0
+            is_last = i == total_chunks - 1
+
+            message_blocks: list[dict[str, Any]] = []
+
+            # Add header to first message
+            if is_first:
+                message_blocks.extend(header_blocks)
+
+            # Add content chunk
+            message_blocks.extend(chunk)
+
+            # Add continuation indicator if not last
+            if not is_last:
+                message_blocks.append(
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": f"_Continued in next message... ({i + 1}/{total_chunks})_",
+                            }
+                        ],
+                    }
+                )
+
+            # Add footer to last message
+            if is_last:
+                message_blocks.extend(footer_blocks)
+
+            chunk_text = f"{fallback_text} (Part {i + 1}/{total_chunks})"
+            if not await self._post_message(session, message_blocks, chunk_text):
+                success = False
+                self._log.error("paginated_send_failed", chunk=i + 1, total=total_chunks)
+
+        return success
+
+    async def send_scan_results(self, results: AggregatedScanResult) -> bool:
+        """
+        Send scan results to Slack asynchronously.
 
         Args:
             results: Aggregated scan results
@@ -44,61 +252,57 @@ class SlackNotifier:
         Returns:
             True if notification was sent successfully
         """
-        if not results.all_zombies:
-            self._log.info("no_zombies_found", message="No zombies to report")
-            return self._send_no_zombies_message()
+        async with aiohttp.ClientSession() as session:
+            if not results.all_zombies:
+                self._log.info("no_zombies_found", message="No zombies to report")
+                return await self._send_no_zombies_message(session)
 
-        try:
-            # Always send summary
-            self._send_summary_message(results)
+            try:
+                # Send summary report with pagination support
+                await self._send_summary_message(session, results)
 
-            # Send individual resource notifications if configured
-            if (
-                self.slack_settings.mode == SlackMode.INTERACTIVE
-                and self.slack_settings.post_individual_resources
-            ):
-                zombies_to_post = results.all_zombies[: self.slack_settings.max_individual_posts]
-                for zombie in zombies_to_post:
-                    self._send_zombie_notification(zombie)
+                # Send individual resource notifications if configured
+                if (
+                    self.slack_settings.mode == SlackMode.INTERACTIVE
+                    and self.slack_settings.post_individual_resources
+                ):
+                    zombies_to_post = results.all_zombies[
+                        : self.slack_settings.max_individual_posts
+                    ]
 
-                remaining = len(results.all_zombies) - len(zombies_to_post)
-                if remaining > 0:
-                    self._send_remaining_count_message(remaining)
+                    for zombie in zombies_to_post:
+                        await self._send_zombie_notification(session, zombie)
 
-            return True
+                    remaining = len(results.all_zombies) - len(zombies_to_post)
+                    if remaining > 0:
+                        await self._send_remaining_count_message(session, remaining)
 
-        except SlackApiError as e:
-            self._log.error("slack_api_error", error=str(e))
-            return False
+                return True
 
-    def _send_no_zombies_message(self) -> bool:
+            except Exception as e:
+                self._log.error("slack_send_error", error=str(e), error_type=type(e).__name__)
+                return False
+
+    async def _send_no_zombies_message(self, session: aiohttp.ClientSession) -> bool:
         """Send a message when no zombies are found."""
-        try:
-            blocks = [
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": (
-                            ":white_check_mark: *Zombie Hunter Scan Complete*\n\n"
-                            "No zombie resources found! Your cloud is clean."
-                        ),
-                    },
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        ":white_check_mark: *Zombie Hunter Scan Complete*\n\n"
+                        "No zombie resources found! Your cloud is clean."
+                    ),
                 },
-            ]
+            },
+        ]
 
-            self.client.chat_postMessage(
-                channel=self.slack_settings.channel,
-                blocks=blocks,
-                text="No zombie resources found!",
-            )
-            return True
+        return await self._post_message(session, blocks, "No zombie resources found!")
 
-        except SlackApiError as e:
-            self._log.error("slack_send_error", error=str(e))
-            return False
-
-    def _send_summary_message(self, results: AggregatedScanResult) -> None:
+    async def _send_summary_message(
+        self, session: aiohttp.ClientSession, results: AggregatedScanResult
+    ) -> None:
         """Send summary message with scan results using enhanced Block Kit."""
         # Build breakdown text
         breakdown_lines = []
@@ -127,7 +331,8 @@ class SlackNotifier:
             savings_emoji = "💰"
             savings_note = "Cleanup recommended"
 
-        blocks: list[dict[str, Any]] = [
+        # Header blocks (first message)
+        header_blocks: list[dict[str, Any]] = [
             {
                 "type": "header",
                 "text": {
@@ -150,6 +355,10 @@ class SlackNotifier:
                 },
             },
             {"type": "divider"},
+        ]
+
+        # Content blocks (paginated)
+        content_blocks: list[dict[str, Any]] = [
             {
                 "type": "section",
                 "fields": [
@@ -176,14 +385,17 @@ class SlackNotifier:
             },
         ]
 
-        # Add scan metadata
+        # Footer blocks (last message)
+        footer_blocks: list[dict[str, Any]] = []
+
+        # Add scan metadata to footer
         if results.results:
             regions = []
             for r in results.results:
                 regions.extend(r.regions_scanned)
             regions_text = ", ".join(sorted(set(regions)))
 
-            blocks.append(
+            footer_blocks.append(
                 {
                     "type": "context",
                     "elements": [
@@ -195,23 +407,23 @@ class SlackNotifier:
                 }
             )
 
-        self.client.chat_postMessage(
-            channel=self.slack_settings.channel,
-            blocks=blocks,
-            text=(
-                f"Zombie Hunter found {results.total_zombie_count} zombies "
-                f"(${results.total_monthly_savings:.2f}/mo potential savings)"
-            ),
+        fallback_text = (
+            f"Zombie Hunter found {results.total_zombie_count} zombies "
+            f"(${results.total_monthly_savings:.2f}/mo potential savings)"
         )
 
-    def _send_zombie_notification(self, zombie: ZombieResource) -> None:
+        await self._send_paginated_blocks(
+            session, content_blocks, header_blocks, footer_blocks, fallback_text
+        )
+
+    async def _send_zombie_notification(
+        self, session: aiohttp.ClientSession, zombie: ZombieResource
+    ) -> None:
         """Send individual zombie notification with action buttons."""
         blocks = self._build_zombie_blocks(zombie)
 
-        self.client.chat_postMessage(
-            channel=self.slack_settings.channel,
-            blocks=blocks,
-            text=f"Zombie found: {zombie.resource_type.value} - {zombie.id}",
+        await self._post_message(
+            session, blocks, f"Zombie found: {zombie.resource_type.value} - {zombie.id}"
         )
 
     def _build_zombie_blocks(self, zombie: ZombieResource) -> list[dict[str, Any]]:
@@ -341,7 +553,9 @@ class SlackNotifier:
 
         return blocks
 
-    def _send_remaining_count_message(self, remaining: int) -> None:
+    async def _send_remaining_count_message(
+        self, session: aiohttp.ClientSession, remaining: int
+    ) -> None:
         """Send message about remaining zombies not posted individually."""
         blocks = [
             {
@@ -356,13 +570,9 @@ class SlackNotifier:
             },
         ]
 
-        self.client.chat_postMessage(
-            channel=self.slack_settings.channel,
-            blocks=blocks,
-            text=f"...and {remaining} more zombie resources",
-        )
+        await self._post_message(session, blocks, f"...and {remaining} more zombie resources")
 
-    def send_deletion_result(
+    async def send_deletion_result(
         self,
         resource_id: str,
         success: bool,
@@ -396,16 +606,10 @@ class SlackNotifier:
             },
         ]
 
-        try:
-            self.client.chat_postMessage(
-                channel=self.slack_settings.channel,
-                blocks=blocks,
-                text=f"Resource {resource_id} {status}",
-            )
-        except SlackApiError as e:
-            self._log.error("slack_send_error", error=str(e))
+        async with aiohttp.ClientSession() as session:
+            await self._post_message(session, blocks, f"Resource {resource_id} {status}")
 
-    def update_message_after_action(
+    async def update_message_after_action(
         self,
         channel: str,
         ts: str,
@@ -441,12 +645,7 @@ class SlackNotifier:
             },
         ]
 
-        try:
-            self.client.chat_update(
-                channel=channel,
-                ts=ts,
-                blocks=blocks,
-                text=f"Resource {zombie.id} {action}",
+        async with aiohttp.ClientSession() as session:
+            await self._update_message(
+                session, channel, ts, blocks, f"Resource {zombie.id} {action}"
             )
-        except SlackApiError as e:
-            self._log.error("slack_update_error", error=str(e))

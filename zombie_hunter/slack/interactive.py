@@ -125,8 +125,8 @@ class SlackInteractiveHandler:
 
             self._update_message(client, channel, message_ts, zombie, action_status, user_id)
 
-            # Send result notification
-            self.notifier.send_deletion_result(resource_id, success, message, user_id)
+            # Send result notification (async)
+            asyncio.run(self.notifier.send_deletion_result(resource_id, success, message, user_id))
 
             self._log.info(
                 "delete_action_completed",
