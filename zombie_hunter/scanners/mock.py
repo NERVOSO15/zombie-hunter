@@ -57,7 +57,8 @@ class MockScanner(BaseScanner):
     Mock scanner that generates fake zombie resources for testing.
 
     This scanner doesn't connect to any cloud provider - it generates
-    realistic-looking zombie resources for testing the full workflow.
+    realistic-looking zombie resources for testing the full workflow
+    including async scanning and Slack notifications.
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -79,8 +80,12 @@ class MockScanner(BaseScanner):
         """Return mock regions."""
         return MOCK_REGIONS
 
-    def scan_volumes(self, region: str) -> list[ZombieResource]:
-        """Generate mock unattached volumes."""
+    # -------------------------------------------------------------------------
+    # Synchronous scan implementations (wrapped by base class for async)
+    # -------------------------------------------------------------------------
+
+    def _scan_volumes_sync(self, region: str) -> list[ZombieResource]:
+        """Generate mock unattached volumes (synchronous)."""
         zombies: list[ZombieResource] = []
         num_volumes = random.randint(1, 4)
 
@@ -115,8 +120,8 @@ class MockScanner(BaseScanner):
 
         return zombies
 
-    def scan_ips(self, region: str) -> list[ZombieResource]:
-        """Generate mock unattached Elastic IPs."""
+    def _scan_ips_sync(self, region: str) -> list[ZombieResource]:
+        """Generate mock unattached Elastic IPs (synchronous)."""
         zombies: list[ZombieResource] = []
         num_ips = random.randint(0, 3)
 
@@ -146,8 +151,8 @@ class MockScanner(BaseScanner):
 
         return zombies
 
-    def scan_load_balancers(self, region: str) -> list[ZombieResource]:
-        """Generate mock idle load balancers."""
+    def _scan_load_balancers_sync(self, region: str) -> list[ZombieResource]:
+        """Generate mock idle load balancers (synchronous)."""
         zombies: list[ZombieResource] = []
         num_lbs = random.randint(0, 2)
 
@@ -191,8 +196,8 @@ class MockScanner(BaseScanner):
 
         return zombies
 
-    def scan_snapshots(self, region: str) -> list[ZombieResource]:
-        """Generate mock old RDS snapshots."""
+    def _scan_snapshots_sync(self, region: str) -> list[ZombieResource]:
+        """Generate mock old RDS snapshots (synchronous)."""
         zombies: list[ZombieResource] = []
         num_snapshots = random.randint(1, 5)
 
@@ -235,8 +240,12 @@ class MockScanner(BaseScanner):
 
         return zombies
 
-    def delete_resource(self, resource: ZombieResource) -> bool:
-        """Simulate deleting a resource."""
+    # -------------------------------------------------------------------------
+    # Synchronous delete implementation (wrapped by base class for async)
+    # -------------------------------------------------------------------------
+
+    def _delete_resource_sync(self, resource: ZombieResource) -> bool:
+        """Simulate deleting a resource (synchronous)."""
         self._log.info(
             "mock_delete",
             resource_id=resource.id,

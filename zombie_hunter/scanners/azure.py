@@ -1,6 +1,7 @@
 """Azure scanner for detecting zombie resources."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import structlog
 
@@ -29,7 +30,18 @@ logger = structlog.get_logger()
 
 @ScannerRegistry.register(CloudProvider.AZURE)
 class AzureScanner(BaseScanner):
-    """Scanner for Azure zombie resources."""
+    """
+    Scanner for Azure zombie resources.
+
+    This scanner detects:
+    - Unattached Managed Disks
+    - Unused Public IPs
+    - Empty Load Balancers
+    - Old Snapshots
+
+    All scan methods are synchronous internally and wrapped by the base class
+    using asyncio.to_thread() for non-blocking async execution.
+    """
 
     def __init__(self, settings: Settings) -> None:
         """Initialize Azure scanner."""
@@ -63,8 +75,12 @@ class AzureScanner(BaseScanner):
         """Return configured Azure regions."""
         return self.settings.scanner.azure_regions
 
-    def scan_volumes(self, region: str) -> list[ZombieResource]:
-        """Scan for unattached managed disks."""
+    # -------------------------------------------------------------------------
+    # Synchronous scan implementations (wrapped by base class for async)
+    # -------------------------------------------------------------------------
+
+    def _scan_volumes_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for unattached managed disks (synchronous)."""
         zombies: list[ZombieResource] = []
 
         try:
@@ -122,8 +138,8 @@ class AzureScanner(BaseScanner):
 
         return zombies
 
-    def scan_ips(self, region: str) -> list[ZombieResource]:
-        """Scan for unassociated public IP addresses."""
+    def _scan_ips_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for unassociated public IP addresses (synchronous)."""
         zombies: list[ZombieResource] = []
 
         try:
@@ -169,8 +185,8 @@ class AzureScanner(BaseScanner):
 
         return zombies
 
-    def scan_load_balancers(self, region: str) -> list[ZombieResource]:
-        """Scan for load balancers with no backend pools or rules."""
+    def _scan_load_balancers_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for load balancers with no backend pools or rules (synchronous)."""
         zombies: list[ZombieResource] = []
 
         try:
@@ -242,8 +258,8 @@ class AzureScanner(BaseScanner):
 
         return zombies
 
-    def scan_snapshots(self, region: str) -> list[ZombieResource]:
-        """Scan for old disk snapshots."""
+    def _scan_snapshots_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for old disk snapshots (synchronous)."""
         zombies: list[ZombieResource] = []
 
         threshold_date = datetime.now(UTC) - timedelta(
@@ -335,8 +351,12 @@ class AzureScanner(BaseScanner):
         except Exception:
             return True  # Assume exists if we can't check
 
-    def delete_resource(self, resource: ZombieResource) -> bool:
-        """Delete a zombie resource."""
+    # -------------------------------------------------------------------------
+    # Synchronous delete implementation (wrapped by base class for async)
+    # -------------------------------------------------------------------------
+
+    def _delete_resource_sync(self, resource: ZombieResource) -> bool:
+        """Delete a zombie resource (synchronous)."""
         try:
             resource_group = resource.metadata.get("resource_group", "")
             if not resource_group:
@@ -390,9 +410,9 @@ class AzureScanner(BaseScanner):
         poller.wait()
         return True
 
-    def get_resource_details(self, resource: ZombieResource) -> dict:
+    def get_resource_details(self, resource: ZombieResource) -> dict[str, Any]:
         """Get detailed information about a resource."""
-        details = {
+        details: dict[str, Any] = {
             "id": resource.id,
             "name": resource.name,
             "type": resource.resource_type.value,

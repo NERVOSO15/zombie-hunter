@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zombie-hunter"
-version = "0.1.0"
+version = "0.6.0"
 description = "A FinOps tool that hunts zombie cloud resources and enables cleanup via Slack"
 readme = "README.md"
 license = {text = "MIT"}

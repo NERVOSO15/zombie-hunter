@@ -22,13 +22,24 @@ logger = structlog.get_logger()
 
 @ScannerRegistry.register(CloudProvider.AWS)
 class AWSScanner(BaseScanner):
-    """Scanner for AWS zombie resources."""
+    """
+    Scanner for AWS zombie resources.
+
+    This scanner detects:
+    - Unattached EBS volumes
+    - Unused Elastic IPs
+    - Idle Load Balancers (ALB/NLB)
+    - Old RDS snapshots
+
+    All scan methods are synchronous internally and wrapped by the base class
+    using asyncio.to_thread() for non-blocking async execution.
+    """
 
     def __init__(self, settings: Settings) -> None:
         """Initialize AWS scanner."""
         super().__init__(settings)
         self.cost_estimator = CostEstimator()
-        self._clients: dict[str, dict[str, Any]] = {}
+        self._clients: dict[str, Any] = {}
 
     @property
     def provider(self) -> CloudProvider:
@@ -57,8 +68,12 @@ class AWSScanner(BaseScanner):
         """Extract Name tag value."""
         return tags.get("Name", "")
 
-    def scan_volumes(self, region: str) -> list[ZombieResource]:
-        """Scan for unattached EBS volumes."""
+    # -------------------------------------------------------------------------
+    # Synchronous scan implementations (wrapped by base class for async)
+    # -------------------------------------------------------------------------
+
+    def _scan_volumes_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for unattached EBS volumes (synchronous)."""
         zombies: list[ZombieResource] = []
         ec2 = self._get_client("ec2", region)
 
@@ -106,8 +121,8 @@ class AWSScanner(BaseScanner):
 
         return zombies
 
-    def scan_ips(self, region: str) -> list[ZombieResource]:
-        """Scan for unattached Elastic IPs."""
+    def _scan_ips_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for unattached Elastic IPs (synchronous)."""
         zombies: list[ZombieResource] = []
         ec2 = self._get_client("ec2", region)
 
@@ -150,8 +165,8 @@ class AWSScanner(BaseScanner):
 
         return zombies
 
-    def scan_load_balancers(self, region: str) -> list[ZombieResource]:
-        """Scan for idle load balancers (ALB/NLB)."""
+    def _scan_load_balancers_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for idle load balancers (ALB/NLB) (synchronous)."""
         zombies: list[ZombieResource] = []
         elbv2 = self._get_client("elbv2", region)
         cloudwatch = self._get_client("cloudwatch", region)
@@ -275,8 +290,8 @@ class AWSScanner(BaseScanner):
             # If we can't check, assume it has traffic (safer)
             return True
 
-    def scan_snapshots(self, region: str) -> list[ZombieResource]:
-        """Scan for old RDS snapshots."""
+    def _scan_snapshots_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for old RDS snapshots (synchronous)."""
         zombies: list[ZombieResource] = []
         rds = self._get_client("rds", region)
 
@@ -348,8 +363,12 @@ class AWSScanner(BaseScanner):
         except ClientError as e:
             return e.response["Error"]["Code"] != "DBInstanceNotFound"
 
-    def delete_resource(self, resource: ZombieResource) -> bool:
-        """Delete a zombie resource."""
+    # -------------------------------------------------------------------------
+    # Synchronous delete implementations (wrapped by base class for async)
+    # -------------------------------------------------------------------------
+
+    def _delete_resource_sync(self, resource: ZombieResource) -> bool:
+        """Delete a zombie resource (synchronous)."""
         try:
             match resource.resource_type:
                 case ResourceType.EBS_VOLUME:
@@ -398,9 +417,9 @@ class AWSScanner(BaseScanner):
         rds.delete_db_snapshot(DBSnapshotIdentifier=resource.id)
         return True
 
-    def get_resource_details(self, resource: ZombieResource) -> dict:
+    def get_resource_details(self, resource: ZombieResource) -> dict[str, Any]:
         """Get detailed information about a resource."""
-        details = {
+        details: dict[str, Any] = {
             "id": resource.id,
             "name": resource.name,
             "type": resource.resource_type.value,

@@ -1,5 +1,6 @@
 """Slack interactive component handler for zombie deletion approval."""
 
+import asyncio
 import json
 import os
 from typing import Any
@@ -91,6 +92,7 @@ class SlackInteractiveHandler:
                 resource_id=resource_id,
                 user=user_id,
                 provider=provider.value,
+                dry_run=self.settings.dry_run,
             )
 
             # Create a minimal zombie resource for deletion
@@ -110,11 +112,17 @@ class SlackInteractiveHandler:
                 self._send_error_response(client, channel, message_ts, str(e))
                 return
 
-            # Perform deletion
-            success, message = scanner.safe_delete(zombie)
+            # Perform deletion (async operation - run in event loop)
+            # Use asyncio.run() to execute the async safe_delete method
+            success, message = asyncio.run(scanner.safe_delete(zombie))
 
             # Update the original message
             action_status = "deleted" if success else "delete_failed"
+
+            # Add dry-run indicator to the status if applicable
+            if self.settings.dry_run and success:
+                action_status = "dry_run_deleted"
+
             self._update_message(client, channel, message_ts, zombie, action_status, user_id)
 
             # Send result notification
@@ -124,6 +132,7 @@ class SlackInteractiveHandler:
                 "delete_action_completed",
                 resource_id=resource_id,
                 success=success,
+                dry_run=self.settings.dry_run,
                 user=user_id,
             )
 
@@ -239,12 +248,14 @@ class SlackInteractiveHandler:
         """Update the original message after an action."""
         action_emoji = {
             "deleted": "🗑️",
+            "dry_run_deleted": "🧪",
             "ignored": "👁️",
             "delete_failed": "❌",
         }
 
         action_text = {
             "deleted": "Deleted",
+            "dry_run_deleted": "Would Delete (DRY RUN)",
             "ignored": "Ignored",
             "delete_failed": "Delete Failed",
         }
@@ -358,7 +369,11 @@ class SlackInteractiveHandler:
         if not socket_token:
             raise ValueError("SLACK_APP_TOKEN environment variable is required for socket mode")
 
-        self._log.info("starting_slack_handler")
+        self._log.info("starting_slack_handler", dry_run=self.settings.dry_run)
+
+        if self.settings.dry_run:
+            self._log.warning("dry_run_mode_active", message="Deletions will be simulated")
+
         handler = SocketModeHandler(self.app, socket_token)
         handler.start()
 

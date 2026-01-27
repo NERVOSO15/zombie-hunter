@@ -28,7 +28,18 @@ logger = structlog.get_logger()
 
 @ScannerRegistry.register(CloudProvider.GCP)
 class GCPScanner(BaseScanner):
-    """Scanner for GCP zombie resources."""
+    """
+    Scanner for GCP zombie resources.
+
+    This scanner detects:
+    - Unattached Persistent Disks
+    - Unused Static IPs
+    - Orphaned Forwarding Rules (Load Balancers)
+    - Old Snapshots
+
+    All scan methods are synchronous internally and wrapped by the base class
+    using asyncio.to_thread() for non-blocking async execution.
+    """
 
     def __init__(self, settings: Settings) -> None:
         """Initialize GCP scanner."""
@@ -62,8 +73,12 @@ class GCPScanner(BaseScanner):
         """Return configured GCP regions."""
         return self.settings.scanner.gcp_regions
 
-    def scan_volumes(self, region: str) -> list[ZombieResource]:
-        """Scan for unattached persistent disks in a region."""
+    # -------------------------------------------------------------------------
+    # Synchronous scan implementations (wrapped by base class for async)
+    # -------------------------------------------------------------------------
+
+    def _scan_volumes_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for unattached persistent disks in a region (synchronous)."""
         zombies: list[ZombieResource] = []
 
         try:
@@ -131,8 +146,8 @@ class GCPScanner(BaseScanner):
 
         return zombies
 
-    def scan_ips(self, region: str) -> list[ZombieResource]:
-        """Scan for unused static IP addresses."""
+    def _scan_ips_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for unused static IP addresses (synchronous)."""
         zombies: list[ZombieResource] = []
 
         try:
@@ -182,8 +197,8 @@ class GCPScanner(BaseScanner):
 
         return zombies
 
-    def scan_load_balancers(self, region: str) -> list[ZombieResource]:
-        """Scan for unused forwarding rules (load balancer frontend)."""
+    def _scan_load_balancers_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for unused forwarding rules (load balancer frontend) (synchronous)."""
         zombies: list[ZombieResource] = []
 
         try:
@@ -236,8 +251,8 @@ class GCPScanner(BaseScanner):
 
         return zombies
 
-    def scan_snapshots(self, region: str) -> list[ZombieResource]:
-        """Scan for old snapshots. Note: GCP snapshots are global, not regional."""
+    def _scan_snapshots_sync(self, region: str) -> list[ZombieResource]:
+        """Scan for old snapshots (synchronous). Note: GCP snapshots are global."""
         zombies: list[ZombieResource] = []
 
         # Only scan once (snapshots are global)
@@ -340,8 +355,12 @@ class GCPScanner(BaseScanner):
 
         return False
 
-    def delete_resource(self, resource: ZombieResource) -> bool:
-        """Delete a zombie resource."""
+    # -------------------------------------------------------------------------
+    # Synchronous delete implementation (wrapped by base class for async)
+    # -------------------------------------------------------------------------
+
+    def _delete_resource_sync(self, resource: ZombieResource) -> bool:
+        """Delete a zombie resource (synchronous)."""
         try:
             match resource.resource_type:
                 case ResourceType.GCP_DISK:
@@ -449,9 +468,9 @@ class GCPScanner(BaseScanner):
             self._log.error("operation_wait_error", error=str(e))
             return False
 
-    def get_resource_details(self, resource: ZombieResource) -> dict:
+    def get_resource_details(self, resource: ZombieResource) -> dict[str, Any]:
         """Get detailed information about a resource."""
-        details = {
+        details: dict[str, Any] = {
             "id": resource.id,
             "name": resource.name,
             "type": resource.resource_type.value,

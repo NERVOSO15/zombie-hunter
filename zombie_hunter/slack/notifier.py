@@ -99,7 +99,7 @@ class SlackNotifier:
             return False
 
     def _send_summary_message(self, results: AggregatedScanResult) -> None:
-        """Send summary message with scan results."""
+        """Send summary message with scan results using enhanced Block Kit."""
         # Build breakdown text
         breakdown_lines = []
         all_zombies = results.all_zombies
@@ -113,7 +113,21 @@ class SlackNotifier:
 
         breakdown_text = "\n".join(breakdown_lines) if breakdown_lines else "No zombies found"
 
-        blocks = [
+        # Calculate annual savings
+        annual_savings = results.total_monthly_savings * 12
+
+        # Determine savings tier for visual emphasis
+        if annual_savings >= 10000:
+            savings_emoji = "🔥"
+            savings_note = "Critical - Take action now!"
+        elif annual_savings >= 1000:
+            savings_emoji = "⚠️"
+            savings_note = "Significant savings available"
+        else:
+            savings_emoji = "💰"
+            savings_note = "Cleanup recommended"
+
+        blocks: list[dict[str, Any]] = [
             {
                 "type": "header",
                 "text": {
@@ -122,25 +136,31 @@ class SlackNotifier:
                     "emoji": True,
                 },
             },
+            # Prominent Savings Banner
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"{savings_emoji} *Total Potential Savings: "
+                        f"${results.total_monthly_savings:.2f}/month "
+                        f"(${annual_savings:,.2f}/year)*\n"
+                        f"_{savings_note}_"
+                    ),
+                },
+            },
+            {"type": "divider"},
             {
                 "type": "section",
                 "fields": [
                     {
                         "type": "mrkdwn",
-                        "text": f"*Total Zombies Found:*\n{results.total_zombie_count}",
-                    },
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*Potential Monthly Savings:*\n${results.total_monthly_savings:.2f}",
-                    },
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*Potential Annual Savings:*\n${results.total_monthly_savings * 12:.2f}",
+                        "text": f"*🧟 Total Zombies:*\n{results.total_zombie_count}",
                     },
                     {
                         "type": "mrkdwn",
                         "text": (
-                            f"*Providers Scanned:*\n"
+                            f"*☁️ Providers:*\n"
                             f"{', '.join(p.value.upper() for p in results.providers_scanned)}"
                         ),
                     },
@@ -151,7 +171,7 @@ class SlackNotifier:
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*Breakdown by Resource Type:*\n{breakdown_text}",
+                    "text": f"*📊 Breakdown by Resource Type:*\n{breakdown_text}",
                 },
             },
         ]
